@@ -1,0 +1,82 @@
+import requests
+import json
+from requests.auth import HTTPBasicAuth
+
+# Configuration
+infoblox_host = "https://<infoblox-ip-or-hostname>/wapi/v2.11"  # Change to match your WAPI version
+username = "admin"
+password = "infoblox"
+
+# Full syslog configuration for each server
+syslog_servers_config = [
+    {
+        "address": "192.168.1.10",
+        "port": 514,
+        "transport": "udp",
+        "severity_filter": "informational",
+        "facility": "local0"
+    },
+    {
+        "address": "192.168.1.11",
+        "port": 514,
+        "transport": "tcp",
+        "severity_filter": "error",
+        "facility": "daemon"
+    },
+    {
+        "address": "192.168.1.12",
+        "port": 6514,
+        "transport": "tls",
+        "severity_filter": "debug",
+        "facility": "local7",
+        "tls_use_compression": False,
+        "tls_verify_server": True
+    }
+]
+
+# Disable SSL warnings
+requests.packages.urllib3.disable_warnings()
+
+def add_syslog_to_grid():
+    url = f"{infoblox_host}/grid"
+    response = requests.get(url, auth=HTTPBasicAuth(username, password), verify=False)
+    grid_ref = response.json()[0]['_ref']
+
+    payload = {
+        "syslog_server": syslog_servers_config
+    }
+
+    update = requests.put(
+        f"{infoblox_host}/{grid_ref}",
+        auth=HTTPBasicAuth(username, password),
+        headers={"Content-Type": "application/json"},
+        data=json.dumps(payload),
+        verify=False
+    )
+    print("Grid syslog update:", update.status_code, update.text)
+
+def add_syslog_to_members():
+    url = f"{infoblox_host}/member"
+    response = requests.get(url, auth=HTTPBasicAuth(username, password), verify=False)
+    members = response.json()
+
+    for member in members:
+        ref = member['_ref']
+        name = member['host_name']
+
+        payload = {
+            "syslog_server": syslog_servers_config
+        }
+
+        update = requests.put(
+            f"{infoblox_host}/{ref}",
+            auth=HTTPBasicAuth(username, password),
+            headers={"Content-Type": "application/json"},
+            data=json.dumps(payload),
+            verify=False
+        )
+        print(f"Updated syslog for member {name}: {update.status_code} - {update.text}")
+
+# Execute
+add_syslog_to_grid()
+add_syslog_to_members()
